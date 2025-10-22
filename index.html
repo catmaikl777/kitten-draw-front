@@ -693,7 +693,7 @@
     <script>
       class DrawingApp {
         constructor() {
-          // ЗАМЕНИТЕ НА ВАШ РЕАЛЬНЫЙ URL RENDER БЭКЕНДА
+          // URL вашего бэкенда - убедитесь что он правильный
           this.BACKEND_URL = "https://kitten-draw.onrender.com";
           this.socket = null;
           this.roomId = null;
@@ -718,6 +718,7 @@
           this.history = [];
           this.historyIndex = -1;
           this.resizeTimeout = null;
+          this.backendAvailable = false;
 
           this.init();
         }
@@ -731,32 +732,39 @@
 
         async checkBackendStatus() {
           try {
-            // Используем mode: 'no-cors' для проверки доступности
-            const response = await fetch(`${this.BACKEND_URL}/health`, {
-              method: "GET",
-              mode: "no-cors",
-            });
-
-            document.getElementById("backendStatus").textContent =
-              "✅ Бэкенд доступен";
-            document.getElementById("backendStatus").className =
-              "backend-success";
+            const response = await fetch(`${this.BACKEND_URL}/health`);
+            if (response.ok) {
+              const data = await response.json();
+              document.getElementById("backendStatus").textContent =
+                "✅ Бэкенд доступен";
+              document.getElementById("backendStatus").className =
+                "backend-success";
+              this.backendAvailable = true;
+            } else {
+              throw new Error("Backend not responding");
+            }
           } catch (error) {
-            console.log("Backend check failed, continuing anyway:", error);
+            console.log("Backend is not available, using offline mode");
             document.getElementById("backendStatus").textContent =
-              "⚠️ Бэкенд может быть недоступен";
+              "⚠️ Режим оффлайн";
             document.getElementById("backendStatus").className =
               "backend-error";
+            this.backendAvailable = false;
           }
         }
 
         connectSocket() {
+          if (!this.backendAvailable) {
+            console.log("Skipping socket connection - backend unavailable");
+            return;
+          }
+
           console.log("Connecting to backend:", this.BACKEND_URL);
 
-          // Socket.IO автоматически обрабатывает CORS
           this.socket = io(this.BACKEND_URL, {
             transports: ["websocket", "polling"],
             timeout: 10000,
+            reconnectionAttempts: 3,
           });
 
           this.socket.on("connect", () => {
@@ -771,11 +779,8 @@
 
           this.socket.on("connect_error", (error) => {
             console.error("Connection error:", error);
-            this.updateStatus("Ошибка подключения", "disconnected");
-            // Показываем сообщение для пользователя
-            this.addSystemMessage(
-              "Не удалось подключиться к серверу. Проверьте интернет соединение."
-            );
+            this.updateStatus("Режим оффлайн", "disconnected");
+            this.backendAvailable = false;
           });
 
           this.socket.on("room_joined", (data) => {
@@ -870,7 +875,6 @@
             e.preventDefault()
           );
 
-          // Дебаунс ресайза чтобы избежать рекурсии
           window.addEventListener("resize", () => {
             clearTimeout(this.resizeTimeout);
             this.resizeTimeout = setTimeout(() => this.resizeCanvas(), 250);
@@ -882,8 +886,12 @@
             document.getElementById("usernameInput").value.trim() || "Аноним";
           this.username = username;
 
+          if (!this.backendAvailable) {
+            this.createRoomLocally();
+            return;
+          }
+
           try {
-            // Пытаемся создать комнату через HTTP
             const response = await fetch(`${this.BACKEND_URL}/api/rooms`, {
               method: "POST",
               headers: {
@@ -897,15 +905,13 @@
               if (data.success) {
                 this.joinRoom(data.roomId);
               } else {
-                this.showError("Ошибка при создании комнаты");
+                throw new Error("Room creation failed");
               }
             } else {
-              // Если HTTP запрос не удался, создаем комнату локально
-              this.createRoomLocally();
+              throw new Error("HTTP error");
             }
           } catch (error) {
             console.error("Error creating room:", error);
-            // Создаем комнату локально если бэкенд недоступен
             this.createRoomLocally();
           }
         }
@@ -915,16 +921,13 @@
             document.getElementById("usernameInput").value.trim() || "Аноним";
           this.username = username;
 
-          // Генерируем ID комнаты локально
           const roomId = Math.random()
             .toString(36)
             .substring(2, 8)
             .toUpperCase();
           this.joinRoom(roomId);
 
-          this.addSystemMessage(
-            "Бэкенд недоступен. Работаем в локальном режиме."
-          );
+          this.addSystemMessage("Режим оффлайн. Рисуйте локально!");
         }
 
         async joinRoom(roomId = null) {
@@ -942,20 +945,18 @@
           this.username = username;
           this.roomId = roomCode;
 
-          // Подключаемся к сокету если доступен
-          if (this.socket && this.socket.connected) {
+          if (this.backendAvailable && this.socket && this.socket.connected) {
             this.doJoinRoom();
           } else {
-            // Если сокет не доступен, переходим в локальный режим
             this.handleRoomJoined({
               roomId: this.roomId,
               playerId: 1,
               players: [{ id: 1, username: this.username, color: "#FF5252" }],
               canvasData: null,
             });
-            this.addSystemMessage(
-              "Режим оффлайн. Ожидаем подключения к серверу..."
-            );
+            if (!this.backendAvailable) {
+              this.addSystemMessage("Режим оффлайн. Рисуйте локально!");
+            }
           }
         }
 
@@ -984,6 +985,18 @@
               this.players.set(player.id, player);
               this.updatePlayerDisplay(player.id, player);
             });
+          } else {
+            // Локальный игрок
+            this.players.set(1, {
+              id: 1,
+              username: this.username,
+              color: "#FF5252",
+            });
+            this.updatePlayerDisplay(1, {
+              id: 1,
+              username: this.username,
+              color: "#FF5252",
+            });
           }
 
           this.updatePlayersCount();
@@ -1002,6 +1015,8 @@
         }
 
         handlePlayerJoined(data) {
+          if (this.players.size >= 2) return; // Максимум 2 игрока
+
           this.players.set(data.player.id, data.player);
           this.updatePlayerDisplay(data.player.id, data.player);
           this.updatePlayersCount();
@@ -1131,10 +1146,12 @@
           this.ctx.lineTo(x, y);
           this.ctx.stroke();
 
-          this.sendDrawData([
-            [this.lastX, this.lastY],
-            [x, y],
-          ]);
+          if (this.backendAvailable && this.socket?.connected) {
+            this.sendDrawData([
+              [this.lastX, this.lastY],
+              [x, y],
+            ]);
+          }
         }
 
         drawEraser(x, y) {
@@ -1144,13 +1161,15 @@
           this.ctx.lineTo(x, y);
           this.ctx.stroke();
 
-          this.sendDrawData(
-            [
-              [this.lastX, this.lastY],
-              [x, y],
-            ],
-            "white"
-          );
+          if (this.backendAvailable && this.socket?.connected) {
+            this.sendDrawData(
+              [
+                [this.lastX, this.lastY],
+                [x, y],
+              ],
+              "white"
+            );
+          }
         }
 
         drawShapePreview(x, y) {
@@ -1231,14 +1250,16 @@
               this.ctx.moveTo(this.startX, this.startY);
               this.ctx.lineTo(currentX, currentY);
               this.ctx.stroke();
-              this.sendDrawData(
-                [
-                  [this.startX, this.startY],
-                  [currentX, currentY],
-                ],
-                null,
-                "line"
-              );
+              if (this.backendAvailable && this.socket?.connected) {
+                this.sendDrawData(
+                  [
+                    [this.startX, this.startY],
+                    [currentX, currentY],
+                  ],
+                  null,
+                  "line"
+                );
+              }
               break;
             case "rectangle":
               const rectWidth = currentX - this.startX;
@@ -1249,14 +1270,16 @@
                 rectWidth,
                 rectHeight
               );
-              this.sendDrawData(
-                [
-                  [this.startX, this.startY],
-                  [currentX, currentY],
-                ],
-                null,
-                "rectangle"
-              );
+              if (this.backendAvailable && this.socket?.connected) {
+                this.sendDrawData(
+                  [
+                    [this.startX, this.startY],
+                    [currentX, currentY],
+                  ],
+                  null,
+                  "rectangle"
+                );
+              }
               break;
             case "circle":
               const radius = Math.sqrt(
@@ -1266,14 +1289,16 @@
               this.ctx.beginPath();
               this.ctx.arc(this.startX, this.startY, radius, 0, Math.PI * 2);
               this.ctx.stroke();
-              this.sendDrawData(
-                [
-                  [this.startX, this.startY],
-                  [currentX, currentY],
-                ],
-                null,
-                "circle"
-              );
+              if (this.backendAvailable && this.socket?.connected) {
+                this.sendDrawData(
+                  [
+                    [this.startX, this.startY],
+                    [currentX, currentY],
+                  ],
+                  null,
+                  "circle"
+                );
+              }
               break;
           }
         }
@@ -1341,7 +1366,7 @@
 
           if (confirm("Вы уверены, что хотите очистить холст?")) {
             this.clearCanvas();
-            if (this.socket?.connected) {
+            if (this.backendAvailable && this.socket?.connected) {
               this.socket.emit("clear", {
                 playerId: this.playerId,
               });
@@ -1377,15 +1402,25 @@
         }
 
         saveToHistory() {
+          // Проверяем что canvas имеет ненулевые размеры
+          if (this.canvas.width === 0 || this.canvas.height === 0) {
+            console.warn("Canvas has zero size, skipping history save");
+            return;
+          }
+
           if (this.history.length >= 20) {
             this.history.shift();
           }
 
-          this.historyIndex = this.history.length;
-          this.history.push(
-            this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height)
-          );
-          this.updateUndoButton();
+          try {
+            this.historyIndex = this.history.length;
+            this.history.push(
+              this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height)
+            );
+            this.updateUndoButton();
+          } catch (error) {
+            console.error("Error saving to history:", error);
+          }
         }
 
         updateUndoButton() {
@@ -1401,14 +1436,13 @@
 
           if (!message || !this.roomId) return;
 
-          if (this.socket?.connected) {
+          if (this.backendAvailable && this.socket?.connected) {
             this.socket.emit("chat_message", {
               playerId: this.playerId,
               username: this.username,
               message: message,
             });
           } else {
-            // Локальный чат если сервер недоступен
             this.displayChatMessage({
               playerId: this.playerId,
               username: this.username,
@@ -1465,7 +1499,9 @@
             document.getElementById("loginScreen").classList.add("active");
 
             this.clearCanvas();
-            this.connectSocket(); // Переподключаемся
+            if (this.backendAvailable) {
+              this.connectSocket();
+            }
           }
         }
 
@@ -1477,7 +1513,6 @@
                 this.addSystemMessage("Код комнаты скопирован в буфер обмена");
               })
               .catch(() => {
-                // Fallback
                 const tempInput = document.createElement("input");
                 tempInput.value = this.roomId;
                 document.body.appendChild(tempInput);
@@ -1490,6 +1525,10 @@
         }
 
         initCanvas() {
+          // Устанавливаем минимальные размеры
+          if (this.canvas.width === 0) this.canvas.width = 800;
+          if (this.canvas.height === 0) this.canvas.height = 500;
+
           this.ctx.fillStyle = "white";
           this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
           this.resizeCanvas();
@@ -1497,12 +1536,11 @@
 
         resizeCanvas() {
           const container = this.canvas.parentElement;
-          if (!container) return;
+          if (!container || container.clientWidth === 0) return;
 
           const width = container.clientWidth;
           const height = Math.min(500, width * 0.625);
 
-          // Проверяем, изменились ли размеры
           if (this.canvas.width === width && this.canvas.height === height) {
             return;
           }
@@ -1513,16 +1551,13 @@
           this.overlay.width = width;
           this.overlay.height = height;
 
-          // Перерисовываем если есть данные
-          const imageData = this.ctx.getImageData(0, 0, 1, 1).data;
-          if (imageData[3] !== 0) {
-            const tempCanvas = document.createElement("canvas");
-            const tempCtx = tempCanvas.getContext("2d");
-            tempCanvas.width = width;
-            tempCanvas.height = height;
-            tempCtx.drawImage(this.canvas, 0, 0, width, height);
-            this.initCanvas();
-            this.ctx.drawImage(tempCanvas, 0, 0);
+          // Перерисовываем историю если есть
+          if (this.history.length > 0 && this.historyIndex >= 0) {
+            const currentImage = this.history[this.historyIndex];
+            this.ctx.putImageData(currentImage, 0, 0);
+          } else {
+            this.ctx.fillStyle = "white";
+            this.ctx.fillRect(0, 0, width, height);
           }
         }
 
@@ -1539,7 +1574,6 @@
         }
       }
 
-      // Инициализация приложения
       document.addEventListener("DOMContentLoaded", () => {
         new DrawingApp();
       });
