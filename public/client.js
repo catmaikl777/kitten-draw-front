@@ -1,16 +1,14 @@
 class DrawingApp {
     constructor() {
-        this.canvas = document.getElementById('drawingCanvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.overlay = document.getElementById('canvasOverlay');
-        this.overlayCtx = this.overlay.getContext('2d');
-        
-        this.ws = null;
+        // URL бэкенда на Render
+        this.BACKEND_URL = 'https://kitten-draw.onrender.com';
+        this.socket = null;
         this.roomId = null;
         this.playerId = null;
         this.username = null;
         this.players = new Map();
         
+        // Настройки рисования
         this.currentTool = 'brush';
         this.currentColor = '#FF5252';
         this.brushSize = 5;
@@ -20,27 +18,102 @@ class DrawingApp {
         this.startX = 0;
         this.startY = 0;
         
+        // Элементы DOM
+        this.canvas = document.getElementById('drawingCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.overlay = document.getElementById('canvasOverlay');
+        this.overlayCtx = this.overlay.getContext('2d');
+        
         this.history = [];
         this.historyIndex = -1;
         
         this.init();
     }
 
-    init() {
+    async init() {
+        await this.checkBackendStatus();
         this.setupEventListeners();
         this.initCanvas();
-        this.connectWebSocket();
+        this.connectSocket();
+    }
+
+    async checkBackendStatus() {
+        try {
+            const response = await fetch(`${this.BACKEND_URL}/health`);
+            const data = await response.json();
+            
+            document.getElementById('backendStatus').textContent = '✅ Бэкенд доступен';
+            document.getElementById('backendStatus').className = 'backend-success';
+            
+        } catch (error) {
+            console.error('Backend is not available:', error);
+            document.getElementById('backendStatus').textContent = '❌ Бэкенд недоступен';
+            document.getElementById('backendStatus').className = 'backend-error';
+        }
+    }
+
+    connectSocket() {
+        console.log('Connecting to backend:', this.BACKEND_URL);
+        
+        this.socket = io(this.BACKEND_URL, {
+            transports: ['websocket', 'polling'],
+            timeout: 10000
+        });
+
+        this.socket.on('connect', () => {
+            console.log('✅ Connected to backend');
+            this.updateStatus('Подключено к серверу', 'connected');
+        });
+
+        this.socket.on('disconnect', (reason) => {
+            console.log('❌ Disconnected from backend:', reason);
+            this.updateStatus('Отключено от сервера', 'disconnected');
+        });
+
+        this.socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+            this.updateStatus('Ошибка подключения', 'disconnected');
+        });
+
+        // Обработчики событий
+        this.socket.on('room_joined', (data) => {
+            this.handleRoomJoined(data);
+        });
+
+        this.socket.on('player_joined', (data) => {
+            this.handlePlayerJoined(data);
+        });
+
+        this.socket.on('player_left', (data) => {
+            this.handlePlayerLeft(data);
+        });
+
+        this.socket.on('draw', (data) => {
+            this.handleRemoteDraw(data);
+        });
+
+        this.socket.on('clear', (data) => {
+            this.clearCanvas();
+        });
+
+        this.socket.on('chat_message', (data) => {
+            this.displayChatMessage(data);
+        });
+
+        this.socket.on('error', (data) => {
+            this.showError(data.message);
+        });
     }
 
     setupEventListeners() {
-        // Экраны
+        // Кнопки создания/присоединения к комнате
         document.getElementById('createRoomBtn').addEventListener('click', () => this.createRoom());
         document.getElementById('joinRoomBtn').addEventListener('click', () => this.joinRoom());
         document.getElementById('leaveRoomBtn').addEventListener('click', () => this.leaveRoom());
         
         // Инструменты
         document.querySelectorAll('.tool-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.selectTool(e.target.dataset.tool));
+            btn.addEventListener('click', (e) => this.selectTool(e.currentTarget.dataset.tool));
         });
         
         // Настройки кисти
@@ -55,7 +128,7 @@ class DrawingApp {
         });
         
         // Действия
-        document.getElementById('clearBtn').addEventListener('click', () => this.clearCanvas());
+        document.getElementById('clearBtn').addEventListener('click', () => this.requestClearCanvas());
         document.getElementById('saveBtn').addEventListener('click', () => this.saveDrawing());
         document.getElementById('undoBtn').addEventListener('click', () => this.undo());
         document.getElementById('copyInviteBtn').addEventListener('click', () => this.copyInviteCode());
@@ -71,86 +144,42 @@ class DrawingApp {
         this.canvas.addEventListener('mousemove', (e) => this.draw(e));
         this.canvas.addEventListener('mouseup', () => this.stopDrawing());
         this.canvas.addEventListener('mouseout', () => this.stopDrawing());
+        this.canvas.addEventListener('touchstart', (e) => this.handleTouch(e));
+        this.canvas.addEventListener('touchmove', (e) => this.handleTouch(e));
+        this.canvas.addEventListener('touchend', () => this.stopDrawing());
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
         
         // Адаптивный размер
         window.addEventListener('resize', () => this.resizeCanvas());
     }
 
-    connectWebSocket() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        this.ws = new WebSocket(`${protocol}//${window.location.host}`);
-        
-        this.ws.onopen = () => {
-            this.updateStatus('Подключено', 'connected');
-        };
-        
-        this.ws.onclose = () => {
-            this.updateStatus('Отключено', 'disconnected');
-        };
-        
-        this.ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            this.updateStatus('Ошибка подключения', 'disconnected');
-        };
-        
-        this.ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                this.handleMessage(data);
-            } catch (error) {
-                console.error('Error parsing message:', error);
-            }
-        };
-    }
-
-    handleMessage(data) {
-        switch (data.type) {
-            case 'room_created':
-                this.joinRoom(data.roomId);
-                break;
-                
-            case 'room_joined':
-                this.handleRoomJoined(data);
-                break;
-                
-            case 'player_joined':
-                this.handlePlayerJoined(data);
-                break;
-                
-            case 'player_left':
-                this.handlePlayerLeft(data);
-                break;
-                
-            case 'draw':
-                this.handleRemoteDraw(data);
-                break;
-                
-            case 'clear':
-                this.clearCanvas();
-                break;
-                
-            case 'chat_message':
-                this.displayChatMessage(data);
-                break;
-                
-            case 'error':
-                this.showError(data.message);
-                break;
-        }
-    }
-
-    createRoom() {
+    async createRoom() {
         const username = document.getElementById('usernameInput').value.trim() || 'Аноним';
         this.username = username;
         
-        this.ws.send(JSON.stringify({
-            type: 'create_room',
-            username: username
-        }));
+        try {
+            const response = await fetch(`${this.BACKEND_URL}/api/rooms`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.joinRoom(data.roomId);
+            } else {
+                this.showError('Ошибка при создании комнаты');
+            }
+        } catch (error) {
+            console.error('Error creating room:', error);
+            this.showError('Не удалось создать комнату. Проверьте подключение.');
+        }
     }
 
-    joinRoom(roomId = null) {
+    async joinRoom(roomId = null) {
         const username = document.getElementById('usernameInput').value.trim() || 'Аноним';
         const roomCode = roomId || document.getElementById('roomCodeInput').value.trim().toUpperCase();
         
@@ -158,29 +187,66 @@ class DrawingApp {
             this.showError('Введите код комнаты');
             return;
         }
-        
+
+        // Проверяем существование комнаты
+        try {
+            const response = await fetch(`${this.BACKEND_URL}/api/rooms/${roomCode}`);
+            const data = await response.json();
+            
+            if (!data.exists && roomId) {
+                // Если комната не существует при создании, это нормально
+                console.log('Creating new room...');
+            } else if (!data.exists) {
+                this.showError('Комната не найдена');
+                return;
+            } else if (data.players >= 2) {
+                this.showError('Комната заполнена (максимум 2 игрока)');
+                return;
+            }
+        } catch (error) {
+            console.error('Error checking room:', error);
+            // Продолжаем попытку подключения
+        }
+
         this.username = username;
         this.roomId = roomCode;
         
-        this.ws.send(JSON.stringify({
-            type: 'join_room',
-            roomId: roomCode,
-            username: username
-        }));
+        // Подключаемся к сокету если еще не подключены
+        if (!this.socket || !this.socket.connected) {
+            this.connectSocket();
+        }
+        
+        // Ждем подключения
+        if (this.socket.connected) {
+            this.doJoinRoom();
+        } else {
+            this.socket.once('connect', () => {
+                this.doJoinRoom();
+            });
+        }
+    }
+
+    doJoinRoom() {
+        this.socket.emit('join_room', {
+            roomId: this.roomId,
+            username: this.username
+        });
     }
 
     handleRoomJoined(data) {
         this.roomId = data.roomId;
         this.playerId = data.playerId;
         
-        // Обновляем UI
+        // Переключаем экраны
         document.getElementById('loginScreen').classList.remove('active');
         document.getElementById('mainScreen').classList.add('active');
         
+        // Обновляем UI
         document.getElementById('roomCodeDisplay').textContent = this.roomId;
         document.getElementById('inviteCode').textContent = this.roomId;
         
         // Обновляем информацию об игроках
+        this.players.clear();
         data.players.forEach(player => {
             this.players.set(player.id, player);
             this.updatePlayerDisplay(player.id, player);
@@ -263,25 +329,35 @@ class DrawingApp {
     }
 
     startDrawing(e) {
-        if (!this.roomId) return;
+        if (!this.roomId || !this.socket?.connected) return;
         
+        e.preventDefault();
         const rect = this.canvas.getBoundingClientRect();
-        this.startX = this.lastX = e.clientX - rect.left;
-        this.startY = this.lastY = e.clientY - rect.top;
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        
+        this.startX = this.lastX = (e.clientX - rect.left) * scaleX;
+        this.startY = this.lastY = (e.clientY - rect.top) * scaleY;
         this.isDrawing = true;
         
         if (this.currentTool === 'brush') {
             this.ctx.beginPath();
             this.ctx.moveTo(this.lastX, this.lastY);
         }
+        
+        this.saveToHistory();
     }
 
     draw(e) {
-        if (!this.isDrawing || !this.roomId) return;
+        if (!this.isDrawing || !this.roomId || !this.socket?.connected) return;
         
+        e.preventDefault();
         const rect = this.canvas.getBoundingClientRect();
-        const currentX = e.clientX - rect.left;
-        const currentY = e.clientY - rect.top;
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        
+        const currentX = (e.clientX - rect.left) * scaleX;
+        const currentY = (e.clientY - rect.top) * scaleY;
         
         this.ctx.lineJoin = 'round';
         this.ctx.lineCap = 'round';
@@ -311,7 +387,6 @@ class DrawingApp {
         this.ctx.lineTo(x, y);
         this.ctx.stroke();
         
-        // Отправляем данные на сервер
         this.sendDrawData([[this.lastX, this.lastY], [x, y]]);
     }
 
@@ -368,19 +443,14 @@ class DrawingApp {
         
         // Очищаем overlay
         this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height);
-        
-        // Сохраняем в историю
-        this.saveToHistory();
     }
 
     finalizeShape() {
-        const rect = this.canvas.getBoundingClientRect();
         const currentX = this.lastX;
         const currentY = this.lastY;
         
         this.ctx.strokeStyle = this.currentColor;
         this.ctx.lineWidth = this.brushSize;
-        this.ctx.fillStyle = this.currentColor + '40'; // Добавляем прозрачность
         
         switch (this.currentTool) {
             case 'line':
@@ -388,7 +458,7 @@ class DrawingApp {
                 this.ctx.moveTo(this.startX, this.startY);
                 this.ctx.lineTo(currentX, currentY);
                 this.ctx.stroke();
-                this.sendDrawData([[this.startX, this.startY], [currentX, currentY]]);
+                this.sendDrawData([[this.startX, this.startY], [currentX, currentY]], null, 'line');
                 break;
             case 'rectangle':
                 const rectWidth = currentX - this.startX;
@@ -406,18 +476,32 @@ class DrawingApp {
         }
     }
 
-    sendDrawData(points, color = null, tool = null) {
-        if (!this.roomId) return;
+    handleTouch(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent('mousedown', {
+            clientX: touch.clientX,
+            clientY: touch.clientY
+        });
         
-        this.ws.send(JSON.stringify({
-            type: 'draw',
+        if (e.type === 'touchstart') {
+            this.startDrawing(mouseEvent);
+        } else if (e.type === 'touchmove') {
+            this.draw(mouseEvent);
+        }
+    }
+
+    sendDrawData(points, color = null, tool = null) {
+        if (!this.roomId || !this.socket?.connected) return;
+        
+        this.socket.emit('draw', {
             playerId: this.playerId,
             points: points,
             color: color || this.currentColor,
             brushSize: this.brushSize,
             tool: tool || this.currentTool,
             canvasData: this.canvas.toDataURL()
-        }));
+        });
     }
 
     handleRemoteDraw(data) {
@@ -459,16 +543,20 @@ class DrawingApp {
         }
     }
 
-    clearCanvas() {
-        if (!this.roomId) return;
+    requestClearCanvas() {
+        if (!this.roomId || !this.socket?.connected) return;
         
+        if (confirm('Вы уверены, что хотите очистить холст?')) {
+            this.clearCanvas();
+            this.socket.emit('clear', {
+                playerId: this.playerId
+            });
+        }
+    }
+
+    clearCanvas() {
         this.ctx.fillStyle = 'white';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        this.ws.send(JSON.stringify({
-            type: 'clear',
-            playerId: this.playerId
-        }));
         
         this.history = [];
         this.historyIndex = -1;
@@ -488,12 +576,21 @@ class DrawingApp {
             const imageData = this.history[this.historyIndex];
             this.ctx.putImageData(imageData, 0, 0);
             this.updateUndoButton();
+            
+            // Синхронизируем с другими игроками
+            if (this.socket?.connected) {
+                this.socket.emit('draw', {
+                    playerId: this.playerId,
+                    canvasData: this.canvas.toDataURL(),
+                    isUndo: true
+                });
+            }
         }
     }
 
     saveToHistory() {
-        // Сохраняем только последние 50 действий
-        if (this.history.length >= 50) {
+        // Сохраняем только последние 20 действий
+        if (this.history.length >= 20) {
             this.history.shift();
         }
         
@@ -511,14 +608,13 @@ class DrawingApp {
         const input = document.getElementById('chatInput');
         const message = input.value.trim();
         
-        if (!message || !this.roomId) return;
+        if (!message || !this.roomId || !this.socket?.connected) return;
         
-        this.ws.send(JSON.stringify({
-            type: 'chat_message',
+        this.socket.emit('chat_message', {
             playerId: this.playerId,
             username: this.username,
             message: message
-        }));
+        });
         
         input.value = '';
     }
@@ -553,24 +649,37 @@ class DrawingApp {
 
     leaveRoom() {
         if (this.roomId) {
-            this.ws.send(JSON.stringify({
-                type: 'leave_room'
-            }));
+            if (this.socket) {
+                this.socket.disconnect();
+            }
             
             this.roomId = null;
+            this.playerId = null;
             this.players.clear();
             
             document.getElementById('mainScreen').classList.remove('active');
             document.getElementById('loginScreen').classList.add('active');
             
             this.clearCanvas();
+            this.connectSocket(); // Переподключаемся для новой комнаты
         }
     }
 
     copyInviteCode() {
-        navigator.clipboard.writeText(this.roomId).then(() => {
-            this.addSystemMessage('Код комнаты скопирован в буфер обмена');
-        });
+        if (this.roomId) {
+            navigator.clipboard.writeText(this.roomId).then(() => {
+                this.addSystemMessage('Код комнаты скопирован в буфер обмена');
+            }).catch(() => {
+                // Fallback для старых браузеров
+                const tempInput = document.createElement('input');
+                tempInput.value = this.roomId;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                this.addSystemMessage('Код комнаты скопирован в буфер обмена');
+            });
+        }
     }
 
     initCanvas() {
@@ -581,19 +690,22 @@ class DrawingApp {
 
     resizeCanvas() {
         const container = this.canvas.parentElement;
-        this.canvas.width = container.clientWidth;
-        this.canvas.height = Math.min(500, container.clientWidth * 0.625);
+        const width = container.clientWidth;
+        const height = Math.min(500, width * 0.625);
         
-        this.overlay.width = this.canvas.width;
-        this.overlay.height = this.canvas.height;
+        this.canvas.width = width;
+        this.canvas.height = height;
+        
+        this.overlay.width = width;
+        this.overlay.height = height;
         
         // Перерисовываем если есть данные
         if (this.ctx.getImageData(0, 0, 1, 1).data[3] !== 0) {
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = this.canvas.width;
-            tempCanvas.height = this.canvas.height;
-            tempCtx.drawImage(this.canvas, 0, 0, this.canvas.width, this.canvas.height);
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            tempCtx.drawImage(this.canvas, 0, 0, width, height);
             this.initCanvas();
             this.ctx.drawImage(tempCanvas, 0, 0);
         } else {
@@ -614,5 +726,16 @@ class DrawingApp {
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', () => {
-    new DrawingApp();
+    window.drawingApp = new DrawingApp();
 });
+
+// Глобальные функции для отладки
+window.getAppState = () => {
+    return {
+        roomId: window.drawingApp.roomId,
+        playerId: window.drawingApp.playerId,
+        username: window.drawingApp.username,
+        socketConnected: window.drawingApp.socket?.connected,
+        players: Array.from(window.drawingApp.players.values())
+    };
+};
