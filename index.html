@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Art Workout - Творческая студия</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        :root {
+            --primary: #6a5af9;
+            --primary-dark: #5a4ae0;
+            --secondary: #ff6b6b;
+            --dark: #2d3748;
+            --light: #f8f9fa;
+            --gray: #a0aec0;
+            --success: #4caf50;
+            --warning: #ffc107;
+            --danger: #f44336;
+            --radius: 12px;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            color: var(--dark);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        header {
+            background: white;
+            padding: 15px 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+        }
+
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        /* Main container */
+        .container {
+            display: flex;
+            flex: 1;
+            padding: 20px;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .sidebar-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .sidebar-section h2 {
+            font-size: 18px;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sidebar-section h2 i {
+            color: var(--primary);
+        }
+
+        /* Tools */
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .tool-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 8px;
+            border: none;
+            background: var(--light);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tool-btn:hover {
+            background: #e9ecef;
+        }
+
+        .tool-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .tool-icon {
+            font-size: 20px;
+        }
+
+        .tool-name {
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        /* Brush settings */
+        .brush-settings {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .setting-item label {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .slider-container input {
+            flex: 1;
+        }
+
+        .slider-value {
+            width: 30px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* Color palette */
+        .color-palette {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .color-option {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            border: 2px solid transparent;
+        }
+
+        .color-option:hover {
+            transform: scale(1.1);
+        }
+
+        .color-option.active {
+            border-color: var(--dark);
+            transform: scale(1.1);
+        }
+
+        /* Canvas area */
+        .canvas-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .canvas-container {
+            flex: 1;
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            position: relative;
+        }
+
+        #drawingCanvas {
+            display: block;
+            background: white;
+            cursor: crosshair;
+            width: 100%;
+            height: 100%;
+        }
+
+        .canvas-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+
+        .canvas-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 15px 20px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Chat panel */
+        .chat-panel {
+            width: 320px;
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h2 {
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 300px;
+        }
+
+        .chat-message {
+            padding: 10px 15px;
+            border-radius: var(--radius);
+            background: var(--light);
+            max-width: 85%;
+            word-break: break-word;
+        }
+
+        .chat-message.own {
+            background: var(--primary);
+            color: white;
+            align-self: flex-end;
+        }
+
+        .chat-message.system {
+            background: #fff3cd;
+            color: #856404;
+            text-align: center;
+            font-style: italic;
+            max-width: 100%;
+        }
+
+        .message-sender {
+            font-weight: 600;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            gap: 10px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #e9ecef;
+            border-radius: var(--radius);
+            font-size: 14px;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--radius);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: var(--light);
+            color: var(--dark);
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: var(--dark);
+        }
+
+        .btn-small {
+            padding: 8px 15px;
+            font-size: 14px;
+        }
+
+        /* Connection status */
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 15px;
+            background: var(--light);
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--gray);
+        }
+
+        .status-indicator.connected {
+            background: var(--success);
+        }
+
+        /* Room info */
+        .room-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--light);
+            padding: 10px 15px;
+            border-radius: var(--radius);
+        }
+
+        .room-code {
+            font-family: monospace;
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--primary);
+        }
+
+        /* Login screen */
+        .login-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: var(--radius);
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: var(--shadow);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .login-header h2 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: var(--primary);
+        }
+
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-weight: 500;
+        }
+
+        .form-group input {
+            padding: 12px 15px;
+            border: 1px solid #e9ecef;
+            border-radius: var(--radius);
+            font-size: 16px;
+        }
+
+        .login-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .container {
+                flex-direction: column;
+            }
+            
+            .sidebar, .chat-panel {
+                width: 100%;
+            }
+            
+            .sidebar {
+                order: 2;
+            }
+            
+            .canvas-area {
+                order: 1;
+            }
+            
+            .chat-panel {
+                order: 3;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <div class="login-header">
+                <h2>Art Workout</h2>
+                <p>Присоединитесь к творческой сессии</p>
+            </div>
+            <div class="login-form">
+                <div class="form-group">
+                    <label for="usernameInput">Ваше имя</label>
+                    <input type="text" id="usernameInput" placeholder="Введите ваше имя" value="Художник">
+                </div>
+                <div class="form-group">
+                    <label for="roomCodeInput">Код комнаты</label>
+                    <input type="text" id="roomCodeInput" placeholder="Введите код комнаты">
+                </div>
+                <div class="login-actions">
+                    <button id="createRoomBtn" class="btn btn-primary" style="flex: 1;">
+                        <i class="fas fa-plus"></i> Создать комнату
+                    </button>
+                    <button id="joinRoomBtn" class="btn btn-secondary" style="flex: 1;">
+                        <i class="fas fa-sign-in-alt"></i> Присоединиться
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app" style="display: none;">
+        <header>
+            <div class="logo">
+                <div class="logo-icon">
+                    <i class="fas fa-paint-brush"></i>
+                </div>
+                <h1>Art Workout</h1>
+            </div>
+            <div class="header-actions">
+                <div class="connection-status">
+                    <div id="statusIndicator" class="status-indicator"></div>
+                    <span id="statusText">Подключение...</span>
+                </div>
+                <div class="room-info">
+                    <span>Комната:</span>
+                    <code id="roomCodeDisplay" class="room-code">---</code>
+                    <button id="copyRoomCodeBtn" class="btn btn-secondary btn-small">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <button id="leaveRoomBtn" class="btn btn-warning">
+                    <i class="fas fa-sign-out-alt"></i> Выйти
+                </button>
+            </div>
+        </header>
+
+        <div class="container">
+            <div class="sidebar">
+                <div class="sidebar-section">
+                    <h2><i class="fas fa-tools"></i> Инструменты</h2>
+                    <div class="tools-grid">
+                        <button class="tool-btn active" data-tool="brush">
+                            <i class="fas fa-paint-brush tool-icon"></i>
+                            <span class="tool-name">Кисть</span>
+                        </button>
+                        <button class="tool-btn" data-tool="eraser">
+                            <i class="fas fa-eraser tool-icon"></i>
+                            <span class="tool-name">Ластик</span>
+                        </button>
+                        <button class="tool-btn" data-tool="line">
+                            <i class="fas fa-minus tool-icon"></i>
+                            <span class="tool-name">Линия</span>
+                        </button>
+                        <button class="tool-btn" data-tool="rectangle">
+                            <i class="fas fa-square tool-icon"></i>
+                            <span class="tool-name">Прямоугольник</span>
+                        </button>
+                        <button class="tool-btn" data-tool="circle">
+                            <i class="fas fa-circle tool-icon"></i>
+                            <span class="tool-name">Круг</span>
+                        </button>
+                        <button class="tool-btn" data-tool="text">
+                            <i class="fas fa-font tool-icon"></i>
+                            <span class="tool-name">Текст</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2><i class="fas fa-sliders-h"></i> Настройки</h2>
+                    <div class="brush-settings">
+                        <div class="setting-item">
+                            <label>Размер кисти</label>
+                            <div class="slider-container">
+                                <input type="range" id="brushSizeSlider" min="1" max="50" value="5" class="brush-size-slider">
+                                <span id="brushSizeValue" class="slider-value">5</span>
+                            </div>
+                        </div>
+                        <div class="setting-item">
+                            <label>Прозрачность</label>
+                            <div class="slider-container">
+                                <input type="range" id="opacitySlider" min="1" max="100" value="100" class="opacity-slider">
+                                <span id="opacityValue" class="slider-value">100%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2><i class="fas fa-palette"></i> Цвета</h2>
+                    <div class="color-palette">
+                        <div class="color-option active" style="background-color: #FF5252;" data-color="#FF5252"></div>
+                        <div class="color-option" style="background-color: #4CAF50;" data-color="#4CAF50"></div>
+                        <div class="color-option" style="background-color: #2196F3;" data-color="#2196F3"></div>
+                        <div class="color-option" style="background-color: #FFC107;" data-color="#FFC107"></div>
+                        <div class="color-option" style="background-color: #9C27B0;" data-color="#9C27B0"></div>
+                        <div class="color-option" style="background-color: #00BCD4;" data-color="#00BCD4"></div>
+                        <div class="color-option" style="background-color: #8BC34A;" data-color="#8BC34A"></div>
+                        <div class="color-option" style="background-color: #FF9800;" data-color="#FF9800"></div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h2><i class="fas fa-history"></i> История</h2>
+                    <div class="action-buttons">
+                        <button id="undoBtn" class="btn btn-secondary btn-small">
+                            <i class="fas fa-undo"></i> Отменить
+                        </button>
+                        <button id="redoBtn" class="btn btn-secondary btn-small">
+                            <i class="fas fa-redo"></i> Повторить
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="canvas-area">
+                <div class="canvas-container">
+                    <canvas id="drawingCanvas"></canvas>
+                    <canvas class="canvas-overlay" id="canvasOverlay"></canvas>
+                </div>
+                <div class="canvas-controls">
+                    <div class="action-buttons">
+                        <button id="clearCanvasBtn" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Очистить холст
+                        </button>
+                    </div>
+                    <div class="action-buttons">
+                        <button id="saveImageBtn" class="btn btn-success">
+                            <i class="fas fa-download"></i> Сохранить
+                        </button>
+                        <button id="shareRoomBtn" class="btn btn-primary">
+                            <i class="fas fa-share"></i> Поделиться
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-panel">
+                <div class="chat-header">
+                    <h2><i class="fas fa-comments"></i> Чат</h2>
+                    <span id="onlineCount">1 участник</span>
+                </div>
+                <div id="chatMessages" class="chat-messages">
+                    <div class="chat-message system">
+                        <div class="message-text">Добро пожаловать в Art Workout! Начните творить вместе.</div>
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="chatInput" placeholder="Введите сообщение...">
+                    <button id="sendMessageBtn" class="btn btn-primary">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class ArtWorkoutApp {
+            constructor() {
+                // Настройки сервера
+                this.SERVER_URL = 'https://kitten-draw.onrender.com';
+                this.socket = null;
+                
+                // Данные приложения
+                this.roomId = null;
+                this.playerId = null;
+                this.username = null;
+                this.players = new Map();
+                
+                // Настройки рисования
+                this.currentTool = 'brush';
+                this.currentColor = '#FF5252';
+                this.brushSize = 5;
+                this.opacity = 1;
+                this.isDrawing = false;
+                this.lastX = 0;
+                this.lastY = 0;
+                this.startX = 0;
+                this.startY = 0;
+                
+                // Холсты
+                this.canvas = document.getElementById('drawingCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.overlay = document.getElementById('canvasOverlay');
+                this.overlayCtx = this.overlay.getContext('2d');
+                
+                // История действий
+                this.history = [];
+                this.historyIndex = -1;
+                
+                this.init();
+            }
+            
+            init() {
+                this.setupEventListeners();
+                this.initCanvas();
+                this.connectToServer();
+            }
+            
+            connectToServer() {
+                try {
+                    this.socket = io(this.SERVER_URL, {
+                        transports: ['websocket', 'polling'],
+                        timeout: 10000
+                    });
+                    
+                    this.socket.on('connect', () => {
+                        this.updateStatus('Подключено', true);
+                        console.log('Connected to server');
+                    });
+                    
+                    this.socket.on('disconnect', () => {
+                        this.updateStatus('Отключено', false);
+                        console.log('Disconnected from server');
+                    });
+                    
+                    this.socket.on('connect_error', (error) => {
+                        this.updateStatus('Ошибка подключения', false);
+                        console.error('Connection error:', error);
+                    });
+                    
+                    // Обработчики событий комнаты
+                    this.socket.on('room_created', (data) => {
+                        this.handleRoomCreated(data);
+                    });
+                    
+                    this.socket.on('room_joined', (data) => {
+                        this.handleRoomJoined(data);
+                    });
+                    
+                    this.socket.on('player_joined', (data) => {
+                        this.handlePlayerJoined(data);
+                    });
+                    
+                    this.socket.on('player_left', (data) => {
+                        this.handlePlayerLeft(data);
+                    });
+                    
+                    this.socket.on('draw_data', (data) => {
+                        this.handleDrawData(data);
+                    });
+                    
+                    this.socket.on('canvas_cleared', () => {
+                        this.clearCanvas();
+                    });
+                    
+                    this.socket.on('chat_message', (data) => {
+                        this.displayChatMessage(data);
+                    });
+                    
+                    this.socket.on('error', (data) => {
+                        this.showError(data.message);
+                    });
+                    
+                } catch (error) {
+                    console.error('Failed to connect to server:', error);
+                    this.updateStatus('Сервер недоступен', false);
+                }
+            }
+            
+            setupEventListeners() {
+                // Кнопки входа
+                document.getElementById('createRoomBtn').addEventListener('click', () => this.createRoom());
+                document.getElementById('joinRoomBtn').addEventListener('click', () => this.joinRoom());
+                document.getElementById('leaveRoomBtn').addEventListener('click', () => this.leaveRoom());
+                
+                // Инструменты
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        this.selectTool(e.currentTarget.dataset.tool);
+                    });
+                });
+                
+                // Настройки кисти
+                document.getElementById('brushSizeSlider').addEventListener('input', (e) => {
+                    this.brushSize = parseInt(e.target.value);
+                    document.getElementById('brushSizeValue').textContent = this.brushSize;
+                });
+                
+                document.getElementById('opacitySlider').addEventListener('input', (e) => {
+                    this.opacity = parseInt(e.target.value) / 100;
+                    document.getElementById('opacityValue').textContent = e.target.value + '%';
+                    this.ctx.globalAlpha = this.opacity;
+                });
+                
+                // Цвета
+                document.querySelectorAll('.color-option').forEach(option => {
+                    option.addEventListener('click', (e) => {
+                        this.selectColor(e.target.dataset.color);
+                    });
+                });
+                
+                // Действия
+                document.getElementById('undoBtn').addEventListener('click', () => this.undo());
+                document.getElementById('redoBtn').addEventListener('click', () => this.redo());
+                document.getElementById('clearCanvasBtn').addEventListener('click', () => this.requestClearCanvas());
+                document.getElementById('saveImageBtn').addEventListener('click', () => this.saveImage());
+                document.getElementById('copyRoomCodeBtn').addEventListener('click', () => this.copyRoomCode());
+                document.getElementById('shareRoomBtn').addEventListener('click', () => this.shareRoom());
+                
+                // Чат
+                document.getElementById('sendMessageBtn').addEventListener('click', () => this.sendMessage());
+                document.getElementById('chatInput').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.sendMessage();
+                });
+                
+                // События холста
+                this.canvas.addEventListener('mousedown', (e) => this.startDrawing(e));
+                this.canvas.addEventListener('mousemove', (e) => this.draw(e));
+                this.canvas.addEventListener('mouseup', () => this.stopDrawing());
+                this.canvas.addEventListener('mouseout', () => this.stopDrawing());
+                
+                // Touch события для мобильных устройств
+                this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e));
+                this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e));
+                this.canvas.addEventListener('touchend', () => this.handleTouchEnd());
+                
+                // Предотвращение скролла при рисовании на мобильных
+                this.canvas.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 1) {
+                        e.preventDefault();
+                    }
+                }, { passive: false });
+                
+                this.canvas.addEventListener('touchmove', (e) => {
+                    if (e.touches.length === 1) {
+                        e.preventDefault();
+                    }
+                }, { passive: false });
+                
+                // Ресайз холста
+                window.addEventListener('resize', () => {
+                    setTimeout(() => this.resizeCanvas(), 100);
+                });
+            }
+            
+            initCanvas() {
+                this.resizeCanvas();
+                this.ctx.fillStyle = 'white';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                this.saveToHistory();
+            }
+            
+            resizeCanvas() {
+                const container = this.canvas.parentElement;
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                
+                if (this.canvas.width !== width || this.canvas.height !== height) {
+                    this.canvas.width = width;
+                    this.canvas.height = height;
+                    this.overlay.width = width;
+                    this.overlay.height = height;
+                    
+                    // Восстановление изображения после ресайза
+                    if (this.history.length > 0 && this.historyIndex >= 0) {
+                        const img = new Image();
+                        img.onload = () => {
+                            this.ctx.drawImage(img, 0, 0, width, height);
+                        };
+                        img.src = this.history[this.historyIndex];
+                    } else {
+                        this.ctx.fillStyle = 'white';
+                        this.ctx.fillRect(0, 0, width, height);
+                    }
+                }
+            }
+            
+            createRoom() {
+                const username = document.getElementById('usernameInput').value.trim() || 'Художник';
+                this.username = username;
+                
+                if (this.socket && this.socket.connected) {
+                    this.socket.emit('create_room', { username });
+                } else {
+                    this.showError('Нет подключения к серверу');
+                }
+            }
+            
+            joinRoom() {
+                const username = document.getElementById('usernameInput').value.trim() || 'Художник';
+                const roomCode = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+                
+                if (!roomCode) {
+                    this.showError('Введите код комнаты');
+                    return;
+                }
+                
+                this.username = username;
+                
+                if (this.socket && this.socket.connected) {
+                    this.socket.emit('join_room', { roomId: roomCode, username });
+                } else {
+                    this.showError('Нет подключения к серверу');
+                }
+            }
+            
+            handleRoomCreated(data) {
+                this.roomId = data.roomId;
+                this.playerId = data.playerId;
+                this.showMainApp();
+                this.updateRoomInfo();
+                this.addSystemMessage(`Комната создана! Код: ${this.roomId}`);
+            }
+            
+            handleRoomJoined(data) {
+                this.roomId = data.roomId;
+                this.playerId = data.playerId;
+                this.players = new Map(data.players.map(p => [p.id, p]));
+                this.showMainApp();
+                this.updateRoomInfo();
+                this.updateOnlineCount();
+                
+                if (data.canvasState) {
+                    this.loadCanvasState(data.canvasState);
+                }
+                
+                this.addSystemMessage(`Вы присоединились к комнате ${this.roomId}`);
+            }
+            
+            handlePlayerJoined(data) {
+                this.players.set(data.player.id, data.player);
+                this.updateOnlineCount();
+                this.addSystemMessage(`${data.player.username} присоединился к комнате`);
+            }
+            
+            handlePlayerLeft(data) {
+                this.players.delete(data.playerId);
+                this.updateOnlineCount();
+                this.addSystemMessage('Игрок покинул комнату');
+            }
+            
+            showMainApp() {
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('app').style.display = 'block';
+            }
+            
+            updateRoomInfo() {
+                document.getElementById('roomCodeDisplay').textContent = this.roomId;
+            }
+            
+            updateOnlineCount() {
+                const count = this.players.size;
+                const text = count === 1 ? '1 участник' : `${count} участника`;
+                document.getElementById('onlineCount').textContent = text;
+            }
+            
+            updateStatus(text, isConnected) {
+                document.getElementById('statusText').textContent = text;
+                const indicator = document.getElementById('statusIndicator');
+                indicator.className = 'status-indicator ' + (isConnected ? 'connected' : '');
+            }
+            
+            selectTool(tool) {
+                this.currentTool = tool;
+                
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
+                
+                // Изменение курсора
+                this.canvas.style.cursor = 
+                    tool === 'brush' ? 'crosshair' :
+                    tool === 'eraser' ? 'cell' :
+                    'default';
+            }
+            
+            selectColor(color) {
+                this.currentColor = color;
+                
+                document.querySelectorAll('.color-option').forEach(option => {
+                    option.classList.remove('active');
+                });
+                document.querySelector(`[data-color="${color}"]`).classList.add('active');
+            }
+            
+            startDrawing(e) {
+                if (!this.roomId) return;
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = this.canvas.width / rect.width;
+                const scaleY = this.canvas.height / rect.height;
+                
+                this.startX = this.lastX = (e.clientX - rect.left) * scaleX;
+                this.startY = this.lastY = (e.clientY - rect.top) * scaleY;
+                this.isDrawing = true;
+                
+                if (this.currentTool === 'brush') {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(this.lastX, this.lastY);
+                }
+                
+                this.saveToHistory();
+            }
+            
+            draw(e) {
+                if (!this.isDrawing || !this.roomId) return;
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = this.canvas.width / rect.width;
+                const scaleY = this.canvas.height / rect.height;
+                
+                const currentX = (e.clientX - rect.left) * scaleX;
+                const currentY = (e.clientY - rect.top) * scaleY;
+                
+                this.ctx.lineJoin = 'round';
+                this.ctx.lineCap = 'round';
+                this.ctx.globalAlpha = this.opacity;
+                
+                switch (this.currentTool) {
+                    case 'brush':
+                        this.drawBrush(currentX, currentY);
+                        break;
+                    case 'eraser':
+                        this.drawEraser(currentX, currentY);
+                        break;
+                    case 'line':
+                    case 'rectangle':
+                    case 'circle':
+                        this.drawShapePreview(currentX, currentY);
+                        break;
+                }
+                
+                this.lastX = currentX;
+                this.lastY = currentY;
+            }
+            
+            drawBrush(x, y) {
+                this.ctx.strokeStyle = this.currentColor;
+                this.ctx.lineWidth = this.brushSize;
+                
+                this.ctx.lineTo(x, y);
+                this.ctx.stroke();
+                
+                this.sendDrawData([
+                    [this.lastX, this.lastY],
+                    [x, y]
+                ]);
+            }
+            
+            drawEraser(x, y) {
+                this.ctx.strokeStyle = 'white';
+                this.ctx.lineWidth = this.brushSize;
+                
+                this.ctx.lineTo(x, y);
+                this.ctx.stroke();
+                
+                this.sendDrawData([
+                    [this.lastX, this.lastY],
+                    [x, y]
+                ], 'white');
+            }
+            
+            drawShapePreview(x, y) {
+                this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height);
+                this.overlayCtx.strokeStyle = this.currentColor;
+                this.overlayCtx.lineWidth = this.brushSize;
+                this.overlayCtx.setLineDash([5, 5]);
+                
+                switch (this.currentTool) {
+                    case 'line':
+                        this.overlayCtx.beginPath();
+                        this.overlayCtx.moveTo(this.startX, this.startY);
+                        this.overlayCtx.lineTo(x, y);
+                        this.overlayCtx.stroke();
+                        break;
+                    case 'rectangle':
+                        const rectWidth = x - this.startX;
+                        const rectHeight = y - this.startY;
+                        this.overlayCtx.strokeRect(this.startX, this.startY, rectWidth, rectHeight);
+                        break;
+                    case 'circle':
+                        const radius = Math.sqrt(
+                            Math.pow(x - this.startX, 2) + Math.pow(y - this.startY, 2)
+                        );
+                        this.overlayCtx.beginPath();
+                        this.overlayCtx.arc(this.startX, this.startY, radius, 0, Math.PI * 2);
+                        this.overlayCtx.stroke();
+                        break;
+                }
+                
+                this.overlayCtx.setLineDash([]);
+            }
+            
+            stopDrawing() {
+                if (!this.isDrawing) return;
+                
+                this.isDrawing = false;
+                this.ctx.beginPath();
+                
+                if (['line', 'rectangle', 'circle'].includes(this.currentTool)) {
+                    this.finalizeShape();
+                }
+                
+                this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height);
+            }
+            
+            finalizeShape() {
+                const currentX = this.lastX;
+                const currentY = this.lastY;
+                
+                this.ctx.strokeStyle = this.currentColor;
+                this.ctx.lineWidth = this.brushSize;
+                this.ctx.globalAlpha = this.opacity;
+                
+                switch (this.currentTool) {
+                    case 'line':
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(this.startX, this.startY);
+                        this.ctx.lineTo(currentX, currentY);
+                        this.ctx.stroke();
+                        this.sendDrawData([
+                            [this.startX, this.startY],
+                            [currentX, currentY]
+                        ], null, 'line');
+                        break;
+                    case 'rectangle':
+                        const rectWidth = currentX - this.startX;
+                        const rectHeight = currentY - this.startY;
+                        this.ctx.strokeRect(this.startX, this.startY, rectWidth, rectHeight);
+                        this.sendDrawData([
+                            [this.startX, this.startY],
+                            [currentX, currentY]
+                        ], null, 'rectangle');
+                        break;
+                    case 'circle':
+                        const radius = Math.sqrt(
+                            Math.pow(currentX - this.startX, 2) + Math.pow(currentY - this.startY, 2)
+                        );
+                        this.ctx.beginPath();
+                        this.ctx.arc(this.startX, this.startY, radius, 0, Math.PI * 2);
+                        this.ctx.stroke();
+                        this.sendDrawData([
+                            [this.startX, this.startY],
+                            [currentX, currentY]
+                        ], null, 'circle');
+                        break;
+                }
+            }
+            
+            handleTouchStart(e) {
+                if (!this.roomId) return;
+                
+                const touch = e.touches[0];
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = this.canvas.width / rect.width;
+                const scaleY = this.canvas.height / rect.height;
+                
+                this.startX = this.lastX = (touch.clientX - rect.left) * scaleX;
+                this.startY = this.lastY = (touch.clientY - rect.top) * scaleY;
+                this.isDrawing = true;
+                
+                if (this.currentTool === 'brush') {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(this.lastX, this.lastY);
+                }
+                
+                this.saveToHistory();
+            }
+            
+            handleTouchMove(e) {
+                if (!this.isDrawing || !this.roomId) return;
+                
+                const touch = e.touches[0];
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = this.canvas.width / rect.width;
+                const scaleY = this.canvas.height / rect.height;
+                
+                const currentX = (touch.clientX - rect.left) * scaleX;
+                const currentY = (touch.clientY - rect.top) * scaleY;
+                
+                this.ctx.lineJoin = 'round';
+                this.ctx.lineCap = 'round';
+                this.ctx.globalAlpha = this.opacity;
+                
+                switch (this.currentTool) {
+                    case 'brush':
+                        this.drawBrush(currentX, currentY);
+                        break;
+                    case 'eraser':
+                        this.drawEraser(currentX, currentY);
+                        break;
+                    case 'line':
+                    case 'rectangle':
+                    case 'circle':
+                        this.drawShapePreview(currentX, currentY);
+                        break;
+                }
+                
+                this.lastX = currentX;
+                this.lastY = currentY;
+            }
+            
+            handleTouchEnd() {
+                this.stopDrawing();
+            }
+            
+            sendDrawData(points, color = null, tool = null) {
+                if (!this.roomId || !this.socket?.connected) return;
+                
+                this.socket.emit('draw', {
+                    playerId: this.playerId,
+                    points: points,
+                    color: color || this.currentColor,
+                    brushSize: this.brushSize,
+                    tool: tool || this.currentTool,
+                    canvasData: this.canvas.toDataURL()
+                });
+            }
+            
+            handleDrawData(data) {
+                const points = data.points;
+                const color = data.color;
+                const brushSize = data.brushSize;
+                const tool = data.tool;
+                
+                this.ctx.strokeStyle = color;
+                this.ctx.lineWidth = brushSize;
+                this.ctx.lineJoin = 'round';
+                this.ctx.lineCap = 'round';
+                this.ctx.globalAlpha = this.opacity;
+                
+                if (tool === 'brush' || tool === 'eraser') {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(points[0][0], points[0][1]);
+                    this.ctx.lineTo(points[1][0], points[1][1]);
+                    this.ctx.stroke();
+                } else if (tool === 'line') {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(points[0][0], points[0][1]);
+                    this.ctx.lineTo(points[1][0], points[1][1]);
+                    this.ctx.stroke();
+                } else if (tool === 'rectangle') {
+                    const startX = points[0][0];
+                    const startY = points[0][1];
+                    const endX = points[1][0];
+                    const endY = points[1][1];
+                    this.ctx.strokeRect(startX, startY, endX - startX, endY - startY);
+                } else if (tool === 'circle') {
+                    const startX = points[0][0];
+                    const startY = points[0][1];
+                    const endX = points[1][0];
+                    const endY = points[1][1];
+                    const radius = Math.sqrt(
+                        Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)
+                    );
+                    this.ctx.beginPath();
+                    this.ctx.arc(startX, startY, radius, 0, Math.PI * 2);
+                    this.ctx.stroke();
+                }
+            }
+            
+            requestClearCanvas() {
+                if (!this.roomId) return;
+                
+                if (confirm('Вы уверены, что хотите очистить холст?')) {
+                    this.clearCanvas();
+                    if (this.socket?.connected) {
+                        this.socket.emit('clear_canvas', { playerId: this.playerId });
+                    }
+                }
+            }
+            
+            clearCanvas() {
+                this.ctx.fillStyle = 'white';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                this.history = [];
+                this.historyIndex = -1;
+            }
+            
+            saveToHistory() {
+                if (this.history.length >= 20) {
+                    this.history.shift();
+                }
+                
+                this.historyIndex = this.history.length;
+                this.history.push(this.canvas.toDataURL());
+            }
+            
+            undo() {
+                if (this.historyIndex > 0) {
+                    this.historyIndex--;
+                    const img = new Image();
+                    img.onload = () => {
+                        this.ctx.drawImage(img, 0, 0);
+                    };
+                    img.src = this.history[this.historyIndex];
+                }
+            }
+            
+            redo() {
+                if (this.historyIndex < this.history.length - 1) {
+                    this.historyIndex++;
+                    const img = new Image();
+                    img.onload = () => {
+                        this.ctx.drawImage(img, 0, 0);
+                    };
+                    img.src = this.history[this.historyIndex];
+                }
+            }
+            
+            saveImage() {
+                const link = document.createElement('a');
+                link.download = `artwork-${this.roomId || 'local'}.png`;
+                link.href = this.canvas.toDataURL('image/png');
+                link.click();
+            }
+            
+            copyRoomCode() {
+                if (this.roomId) {
+                    navigator.clipboard.writeText(this.roomId)
+                        .then(() => {
+                            this.addSystemMessage('Код комнаты скопирован в буфер обмена');
+                        })
+                        .catch(() => {
+                            // Fallback для старых браузеров
+                            const tempInput = document.createElement('input');
+                            tempInput.value = this.roomId;
+                            document.body.appendChild(tempInput);
+                            tempInput.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(tempInput);
+                            this.addSystemMessage('Код комнаты скопирован в буфер обмена');
+                        });
+                }
+            }
+            
+            shareRoom() {
+                if (this.roomId && navigator.share) {
+                    navigator.share({
+                        title: 'Присоединяйтесь к моей творческой сессии',
+                        text: 'Рисуйте вместе со мной в Art Workout!',
+                        url: `${window.location.origin}?room=${this.roomId}`
+                    });
+                } else {
+                    this.copyRoomCode();
+                }
+            }
+            
+            sendMessage() {
+                const input = document.getElementById('chatInput');
+                const message = input.value.trim();
+                
+                if (!message || !this.roomId) return;
+                
+                if (this.socket?.connected) {
+                    this.socket.emit('send_message', {
+                        playerId: this.playerId,
+                        username: this.username,
+                        message: message
+                    });
+                }
+                
+                input.value = '';
+            }
+            
+            displayChatMessage(data) {
+                const messagesContainer = document.getElementById('chatMessages');
+                const messageDiv = document.createElement('div');
+                
+                messageDiv.className = `chat-message ${
+                    data.playerId === this.playerId ? 'own' : ''
+                }`;
+                
+                if (data.playerId === 'system') {
+                    messageDiv.className = 'chat-message system';
+                    messageDiv.innerHTML = `<div class="message-text">${data.message}</div>`;
+                } else {
+                    messageDiv.innerHTML = `
+                        <div class="message-sender">${data.username}</div>
+                        <div class="message-text">${data.message}</div>
+                    `;
+                }
+                
+                messagesContainer.appendChild(messageDiv);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+            
+            addSystemMessage(message) {
+                this.displayChatMessage({
+                    playerId: 'system',
+                    username: 'Система',
+                    message: message
+                });
+            }
+            
+            leaveRoom() {
+                if (this.roomId) {
+                    if (this.socket) {
+                        this.socket.emit('leave_room', { playerId: this.playerId });
+                    }
+                    
+                    this.roomId = null;
+                    this.playerId = null;
+                    this.players.clear();
+                    
+                    document.getElementById('app').style.display = 'none';
+                    document.getElementById('loginScreen').style.display = 'flex';
+                    
+                    this.clearCanvas();
+                }
+            }
+            
+            loadCanvasState(canvasData) {
+                const img = new Image();
+                img.onload = () => {
+                    this.ctx.drawImage(img, 0, 0);
+                };
+                img.src = canvasData;
+            }
+            
+            showError(message) {
+                alert(`Ошибка: ${message}`);
+            }
+        }
+        
+        // Инициализация приложения
+        document.addEventListener('DOMContentLoaded', () => {
+            new ArtWorkoutApp();
+        });
+    </script>
+</body>
+</html>
